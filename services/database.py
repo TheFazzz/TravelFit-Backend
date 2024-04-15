@@ -36,31 +36,6 @@ def get_user(user_id, db):
         if connection:
             connection.close()
 
-async def get_user_by_email(email: str, db):
-    """Retrieves a user with the specified email from the database."""
-    connection, cursor = db
-
-    try:
-        cursor.execute("SELECT * FROM Users WHERE email = %s", (email,))
-        user_data = cursor.fetchone()
-
-        if user_data:
-            return {
-                "id": user_data[0],
-                "firstName": user_data[1],
-                "lastName": user_data[2],
-                "email": user_data[3],
-                "password_hash": user_data[4],
-            }
-        
-        raise HTTPException(status_code=401, detail="User not found")
-
-    finally:
-       if cursor:
-           cursor.close()
-       if connection:
-           connection.close()
-
 def insert_gym_photo_into_database(gym_id: int, photo_url: str, db):
     
     connection, cursor = db

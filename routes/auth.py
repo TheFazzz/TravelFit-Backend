@@ -64,27 +64,58 @@ router = APIRouter(
 
 @router.post("/login")
 async def login_for_access_token(
-    user: LoginRequest,
+    user: LoginRequest, 
     db: tuple = Depends(get_db_connection)
 ):
+    connection, cursor = db
     try:
-        stored_user = await get_user_by_email(user.email, db)
-        if stored_user and verify_password(user.password, stored_user["password_hash"]):
-            user_id = stored_user["id"]
-            first_name = stored_user["firstName"]
-            last_name = stored_user["lastName"]
-            access_token = await create_access_token(data={
-                "sub": str(user_id),
-                "firstName": first_name,
-                "lastName": last_name
-            })
-            return {"access_token": access_token, "token_type": "bearer"}
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    # Catch HTTPException raised from get_user_by_email
-    except HTTPException as e:
-        raise e
+        # Authenticate the user
+        cursor.execute("SELECT * FROM users WHERE email = %s", (user.email,))
+        user_data = cursor.fetchone()
+        if user_data:
+            stored_user = {
+                "id": user_data[0],
+                "firstName": user_data[1],
+                "lastName": user_data[2],
+                "email": user_data[3],
+                "password_hash": user_data[4],
+            }
+        if not user_data:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        if not verify_password(user.password, stored_user["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        user_id = stored_user["id"]
+        first_name = stored_user["firstName"]
+        last_name = stored_user["lastName"]
+
+        # Determine the user's role
+        cursor.execute("SELECT id FROM Admins WHERE user_id = %s", (user_id,))
+        if cursor.fetchone():
+            role = "admin"
+        else:
+            cursor.execute("SELECT id FROM Gym_Admins WHERE user_id = %s", (user_id,))
+            if cursor.fetchone():
+                role = "gym"
+            else:
+                role = "user"
+
+        # Create access token
+        access_token = await create_access_token(data={
+            "sub": str(user_id),
+            "firstName": first_name,
+            "lastName": last_name,
+            "role": role
+        })
+
+        return {"access_token": access_token, "token_type": "bearer", "role": role}
     except Exception as e:
+        print(f"An error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        cursor.close()
+        connection.close()
 
 
 @router.post("/logout")
