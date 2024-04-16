@@ -501,8 +501,7 @@ def purchase_guest_pass(
         # Generate QR code
         qr_code_data = (
             f"pass_id:{purchase_id},user_id:{user_id},gym_id:{gym_id}, "
-            f"pass_name:{pass_info[0]}, duration:{pass_info[1]}, "
-            "scan_url:https://travelfit.azurewebsites.net/verify-pass"
+            f"duration:{pass_info[1]} "
         )
         qr_code = qrcode.make(qr_code_data, image_factory=PilImage)
 
