@@ -471,8 +471,7 @@ def purchase_guest_pass(
 ):
     if user['role'] not in ['user']:
             raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
-    if user['role'] == 'user' and user['sub'] != user_id:
-        raise HTTPException(status_code=403, detail="Access denied: User doesn't match for purchase")
+    
     
     connection, cursor = db
     try:
