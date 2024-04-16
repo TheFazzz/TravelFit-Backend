@@ -774,8 +774,30 @@ async def verify_pass(
 
             connection.commit()
 
+        cursor.execute(
+            """
+            SELECT firstName
+            FROM Users
+            WHERE id = %s
+            """,
+            (scanned_data.user_id,)
+        )
+        user_result = cursor.fetchone()
+        user_name = user_result[0] if user_result else "User"
+
+        cursor.execute(
+            """
+            SELECT gym_name
+            FROM Gyms
+            WHERE id = %s
+            """,
+            (scanned_data.gym_id,)
+        )
+        gym_result = cursor.fetchone()
+        gym_name = gym_result[0] if gym_result else "Gym"
+
         if is_valid:
-            return {"message": "Pass is valid"}
+            return {"message": f"Welcome {user_name} to {gym_name}, Enjoy your workout!"}
         else:
             raise HTTPException(status_code=400, detail="Pass is not valid")
         

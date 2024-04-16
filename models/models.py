@@ -89,5 +89,4 @@ class ScannedQrCodeData(BaseModel):
     pass_id: int
     user_id: int
     gym_id: int
-    pass_name: str
     duration: int
