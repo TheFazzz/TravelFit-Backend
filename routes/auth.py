@@ -52,15 +52,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         return payload
     
     except JWTError:
-        raise credentials_exception
-    
+        raise credentials_exception   
 
 router = APIRouter(
     prefix='/auth',
     tags=['auth']
 )
-
-
 
 @router.post("/login")
 async def login_for_access_token(
@@ -72,16 +69,16 @@ async def login_for_access_token(
         # Authenticate the user
         cursor.execute("SELECT * FROM users WHERE email = %s", (user.email,))
         user_data = cursor.fetchone()
-        if user_data:
-            stored_user = {
-                "id": user_data[0],
-                "firstName": user_data[1],
-                "lastName": user_data[2],
-                "email": user_data[3],
-                "password_hash": user_data[4],
-            }
         if not user_data:
             raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        stored_user = {
+            "id": user_data[0],
+            "firstName": user_data[1],
+            "lastName": user_data[2],
+            "email": user_data[3],
+            "password_hash": user_data[4],
+        }
 
         if not verify_password(user.password, stored_user["password_hash"]):
             raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -90,26 +87,36 @@ async def login_for_access_token(
         first_name = stored_user["firstName"]
         last_name = stored_user["lastName"]
 
-        # Determine the user's role
+        # Determine the user's role and fetch gym_id if necessary
+        role = "user"
+        gym_id = None
         cursor.execute("SELECT id FROM Admins WHERE user_id = %s", (user_id,))
         if cursor.fetchone():
             role = "admin"
         else:
-            cursor.execute("SELECT id FROM Gym_Admins WHERE user_id = %s", (user_id,))
-            if cursor.fetchone():
+            cursor.execute("SELECT gym_id FROM Gym_Admins WHERE user_id = %s", (user_id,))
+            gym_admin_data = cursor.fetchone()
+            if gym_admin_data:
                 role = "gym"
-            else:
-                role = "user"
+                gym_id = gym_admin_data[0]
 
         # Create access token
-        access_token = await create_access_token(data={
+        token_data = {
             "sub": str(user_id),
             "firstName": first_name,
             "lastName": last_name,
             "role": role
-        })
+        }
+        if gym_id:
+            token_data["gym_id"] = gym_id
 
-        return {"access_token": access_token, "token_type": "bearer", "role": role}
+        access_token = await create_access_token(data=token_data)
+
+        return_data = {"access_token": access_token, "token_type": "bearer", "role": role}
+        if gym_id:
+            return_data["gym_id"] = gym_id
+
+        return return_data
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -165,8 +172,15 @@ async def register(
 async def upload_profile_photo(
     user_id: int,
     profile_photo: UploadFile = File(...),
+    user = Depends(get_current_user),
     db: tuple = Depends(get_db_connection)
 ):
+    if user['role'] not in ['admin', 'user']:
+        raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
+
+    if user['role'] == 'user' and user['sub'] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied: Cannot update other users info")
+    
     connection, cursor = db
     try:
         # Check if user already has a profile photo
@@ -222,8 +236,15 @@ async def upload_profile_photo(
 async def update_user_info(
     user_id: int,
     user_info: UpdateUserInfo,
+    user = Depends(get_current_user),
     db: tuple = Depends(get_db_connection)
 ):
+    if user['role'] not in ['admin', 'user']:
+        raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
+
+    if user['role'] == 'user' and user['sub'] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied: Cannot update other users info")
+
     connection, cursor = db
     try:
          # Check if the user exists
@@ -270,8 +291,15 @@ async def update_user_info(
 @router.get("/users/{user_id}")
 def get_user_info(
     user_id: int,
+    user = Depends(get_current_user),
     db: tuple = Depends(get_db_connection)
 ):
+    if user['role'] not in ['admin', 'user']:
+        raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
+
+    if user['role'] == 'user' and user['sub'] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied: Cannot view other users info")
+
     connection, cursor = db
     try:
         cursor.execute(
@@ -308,8 +336,12 @@ def get_user_info(
 
 @router.get("/users")
 async def all_users(
+    user = Depends(get_current_user),
     db: tuple = Depends(get_db_connection)
 ):
+    if user['role'] not in ['admin']:
+        raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
+
     connection, cursor = db
     
     try:

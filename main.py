@@ -78,8 +78,13 @@ def get_gyms_in_city(
 @app.post("/gyms")
 def add_gym_listing(
     gym: GymCreateRequest,
+    user = Depends(get_current_user),
     db: tuple = Depends(get_db_connection)
 ):
+    if user['role'] not in ['admin']:
+            raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
+
+
     connection, cursor = db
         # Construct the address string
     address = f"{gym.address1}, {gym.city}, {gym.state}, {gym.zipcode}"
@@ -185,9 +190,17 @@ def get_gym_by_id(
 @app.put("/gyms/{gym_id}")
 def update_gym_info(
     gym_id: int,
-    update_request: GymUpdateRequest,  
+    update_request: GymUpdateRequest,
+    user = Depends(get_current_user),  
     db: tuple = Depends(get_db_connection)
 ):
+    # check user roles
+    if user['role'] not in ['admin', 'gym']:
+            raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
+
+    if user['role'] == 'gym' and user['gym_id'] != gym_id:
+        raise HTTPException(status_code=403, detail="Access denied: Cannot update other gyms")
+
     connection, cursor = db
     try:
         # Check if the gym exists
@@ -268,13 +281,15 @@ def update_gym_info(
 def add_guest_pass_options(
     gym_id: int,
     req: PassOptionCreateRequest,
-    # user: dict = Depends(get_current_user),  # get the current user
+    user = Depends(get_current_user),  # get the current user
     db: tuple = Depends(get_db_connection)
 ):
-    # if not is_user_admin(user):
-    #    raise HTTPException(status_code=403, detail="You don't have permission to access this resource.")
+    if user['role'] not in ['admin', 'gym']:
+        raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
 
-    
+    if user['role'] == 'gym' and user['gym_id'] != gym_id:
+        raise HTTPException(status_code=403, detail="Access denied: Cannot add passes to other gyms")
+   
     connection, cursor = db
     try:
         # Construct the SQL query
@@ -353,8 +368,15 @@ def get_guest_pass_options(
 def delete_guest_pass_option(
     gym_id: int,
     pass_option_id: int,
+    user = Depends(get_current_user),
     db: tuple = Depends(get_db_connection)
 ):
+    if user['role'] not in ['admin', 'gym']:
+        raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
+
+    if user['role'] == 'gym' and user['gym_id'] != gym_id:
+        raise HTTPException(status_code=403, detail="Access denied: Cannot update other gyms")
+
     connection, cursor = db
     try:
         # Check if the pass option exists and is associated with the specified gym
@@ -396,8 +418,12 @@ def delete_guest_pass_option(
 @app.delete("/gyms/{gym_id}")
 def delete_gym(
     gym_id: int,
+    user = Depends(get_current_user),
     db: tuple = Depends(get_db_connection)
 ):
+    if user['role'] not in ['admin']:
+            raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
+
     connection, cursor = db
     try:
         # Check if exist
@@ -440,9 +466,14 @@ def delete_gym(
 def purchase_guest_pass(
     gym_id: int,
     pass_option_id: int,  # ID of the guest pass option being purchased
-    user: dict = Depends(get_current_user),  # get the current user
+    user = Depends(get_current_user),  # get the current user
     db: tuple = Depends(get_db_connection)
 ):
+    if user['role'] not in ['user']:
+            raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
+    if user['role'] == 'user' and user['sub'] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied: User doesn't match for purchase")
+    
     connection, cursor = db
     try:
         user_id = int(user["sub"])
@@ -471,7 +502,7 @@ def purchase_guest_pass(
         qr_code_data = (
             f"pass_id:{purchase_id},user_id:{user_id},gym_id:{gym_id}, "
             f"pass_name:{pass_info[0]}, duration:{pass_info[1]}, "
-            "scan_url:http://127.0.0.1:8000/verify-pass"
+            "scan_url:https://travelfit.azurewebsites.net/verify-pass"
         )
         qr_code = qrcode.make(qr_code_data, image_factory=PilImage)
 
@@ -506,8 +537,15 @@ def purchase_guest_pass(
 @app.post("/gyms/{gym_id}/photos/add")
 async def upload_photos(
     gym_id: int, 
+    user = Depends(get_current_user),
     files: List[UploadFile] = File(...)
-    ):
+):
+    if user['role'] not in ['admin', 'gym']:
+        raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
+
+    if user['role'] == 'gym' and user['gym_id'] != gym_id:
+        raise HTTPException(status_code=403, detail="Access denied: Cannot update other gyms photos")
+
     blob_connection_string = get_blob_connection_string()
 
     container_name = f"gym-photos"
@@ -543,8 +581,15 @@ async def upload_photos(
 @app.delete("/gyms/{gym_id}/photos/{photo_id}")
 async def delete_photo(
     gym_id: int,
-    photo_id: int
+    photo_id: int,
+    user = Depends(get_current_user),
 ):
+    if user['role'] not in ['admin', 'gym']:
+        raise HTTPException(status_code=403, detail="Access denied: Unauthorized role")
+
+    if user['role'] == 'gym' and user['gym_id'] != gym_id:
+        raise HTTPException(status_code=403, detail="Access denied: Cannot delete other gyms photos")
+
     try:
         db = get_db_connection()
         # Check if the photo exists in the database
