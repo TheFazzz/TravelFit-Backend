@@ -805,4 +805,70 @@ async def verify_pass(
         connection.rollback()
         raise HTTPException(status_code=500, detail="Failed to fetch guest pass from QR code")    
 
-    
+@app.post("/users/{user_id}/favorites")
+async def add_favorite_gym(
+    gym_id: int, 
+    user = Depends(get_current_user),
+    db: tuple = Depends(get_db_connection)
+):
+    connection, cursor = db
+    try:
+        user_id = user['sub']
+        cursor.execute(
+            """
+            INSERT INTO UserFavorites (user_id, gym_id) 
+            VALUES (%s, %s) ON CONFLICT DO NOTHING
+            """, 
+            (user_id, gym_id)
+        )
+        connection.commit()
+        return {"message": "Gym added to favorites successfully"}
+    except Exception as e:
+        connection.rollback()
+        raise HTTPException(status_code=500, detail="Failed to add gym to favorites")
+    finally:
+        cursor.close()
+        connection.close()   
+
+@app.get("/users/favorites")
+async def get_favorite_gyms(
+    user = Depends(get_current_user), 
+    db: tuple = Depends(get_db_connection)
+):
+    connection, cursor = db
+    try:
+        user_id = user['sub']
+        cursor.execute(
+            """
+            SELECT g.id, g.gym_name FROM Gyms g
+            JOIN UserFavorites uf ON uf.gym_id = g.id
+            WHERE uf.user_id = %s
+            """, 
+            (user_id,)
+        )
+        favorites = cursor.fetchall()
+        return {"favorites": favorites}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to retrieve users favorites.")
+    finally:
+        cursor.close()
+        connection.close()
+ 
+@app.delete("/users/favorites/{gym_id}")
+async def remove_favorite_gym(
+    gym_id: int, 
+    user = Depends(get_current_user), 
+    db: tuple = Depends(get_db_connection)
+):
+    connection, cursor = db
+    try:
+        user_id = user['sub']
+        cursor.execute("DELETE FROM UserFavorites WHERE user_id = %s AND gym_id = %s", (user_id, gym_id))
+        connection.commit()
+        return {"message": "Gym removed from favorites successfully"}
+    except Exception as e:
+        connection.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete gym from favorites.")
+    finally:
+        cursor.close()
+        connection.close()
