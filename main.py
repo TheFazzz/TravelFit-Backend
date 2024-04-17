@@ -840,7 +840,7 @@ async def get_favorite_gyms(
         user_id = user['sub']
         cursor.execute(
             """
-            SELECT g.id, g.gym_name FROM Gyms g
+            SELECT g.id, g.gym_name, g.city FROM Gyms g
             JOIN UserFavorites uf ON uf.gym_id = g.id
             WHERE uf.user_id = %s
             """, 
