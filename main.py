@@ -18,6 +18,8 @@ import io
 import qrcode
 from qrcode.image.pil import PilImage
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 app = FastAPI()
 app.include_router(routes.auth.router)
@@ -787,7 +789,7 @@ async def verify_pass(
 
         cursor.execute(
             """
-            SELECT gym_name
+            SELECT gym_name, city
             FROM Gyms
             WHERE id = %s
             """,
@@ -795,8 +797,15 @@ async def verify_pass(
         )
         gym_result = cursor.fetchone()
         gym_name = gym_result[0] if gym_result else "Gym"
+        gym_city = gym_result[1] if gym_result else "City"
 
         if is_valid:
+            usage_date = datetime.now(ZoneInfo("UTC"))
+            cursor.execute(
+                "INSERT INTO PassUsage (purchase_id, user_id, gym_id, usage_date, gym_name) VALUES (%s, %s, %s, %s, %s, %s)",
+                (scanned_data.pass_id, scanned_data.user_id, scanned_data.gym_id, usage_date, gym_name, gym_city)
+            )
+            connection.commit()
             return {"message": f"Welcome {user_name} to {gym_name}, Enjoy your workout!"}
         else:
             raise HTTPException(status_code=400, detail="Pass is not valid")
@@ -869,6 +878,37 @@ async def remove_favorite_gym(
     except Exception as e:
         connection.rollback()
         raise HTTPException(status_code=500, detail="Failed to delete gym from favorites.")
+    finally:
+        cursor.close()
+        connection.close()
+
+@app.get("/users/pass-usage")
+async def get_user_guest_passes(
+    user: dict = Depends(get_current_user),
+    db: tuple = Depends(get_db_connection)
+):
+    connection, cursor = db    
+    
+    try:
+        
+        user_id = int(user["sub"])
+    
+        cursor.execute(
+            """
+            SELECT gym_id, usage_date, gym_name, gym_city
+            FROM PassUsage WHERE user_id = %s
+            """,
+            (user_id,)
+        )
+        pass_usages = cursor.fetchall()
+
+        return [{"gym_id": pass_use[0], "usage_date": pass_use[1], "gym_name": pass_use[2],
+                 "gym_city": pass_use[3]} 
+                 for pass_use in pass_usages]
+        
+    except Exception as e:
+        connection.rollback()
+        raise HTTPException(status_code=500, detail="Failed to fetch guest passes")
     finally:
         cursor.close()
         connection.close()
