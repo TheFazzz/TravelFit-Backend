@@ -883,7 +883,7 @@ async def remove_favorite_gym(
         connection.close()
 
 @app.get("/users/pass-usage")
-async def get_user_guest_passes(
+async def get_user_pass_usages(
     user: dict = Depends(get_current_user),
     db: tuple = Depends(get_db_connection)
 ):
